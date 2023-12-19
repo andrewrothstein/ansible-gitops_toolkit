@@ -1,36 +1,44 @@
 ---
-# tasks file for gitops-toolkit
-- set_fact:
-    _gtk_argocd: "{{ gtk_argocd_defaults | combine(gtk_argocd, recursive=True) }}"
-    _gtk_start_clusters: "{{ gtk_start_clusters_defaults | combine(gtk_start_clusters, recursive=True) }}"
+- name: Install dependent binaries
+  block:
+    - name: Install unarchivedeps
+      ansible.builtin.include_role:
+        name: andrewrothstein.unarchivedeps
+    - name: Install git
+      ansible.builtin.include_role:
+        name: andrewrothstein.git
+    - name: Install kubectl
+      ansible.builtin.include_role:
+        name: andrewrothstein.kubectl
+    - ansible.builtin.include_role:
+        name: andrewrothstein.argocd
+  when: gtk_install_dependent_binaries | default(true)
 
-- include_role:
-    name: andrewrothstein.unarchivedeps
-  when: gtk_install_dependent_binaries
-- include_role:
-    name: andrewrothstein.kubectl
-  when: gtk_install_dependent_binaries
-- include_role:
-    name: andrewrothstein.argocd
-  when: gtk_install_dependent_binaries
+- ansible.builtin.include_tasks: install_gtk.yml
+  name: Install gitops-toolkit cli
 
-- include_tasks: install_gtk.yml
-- include_tasks: install_cacert.yml
+- ansible.builtin.include_tasks: install_cacert.yml
+  name: Install CA cert bundle
+  when: _gtk_ca.enabled
 
-- name: cloning argocd deployment manifest from {{ _gtk_argocd.manifest.git.repo }}@{{ _gtk_argocd.manifest.git.version }} to {{ _gtk_argocd.manifest.dir }}
-  when: _gtk_argocd.manifest.git.enabled
-  git:
-    repo: "{{ _gtk_argocd.manifest.git.repo }}"
-    version: "{{ _gtk_argocd.manifest.git.version }}"
-    dest: "{{ _gtk_argocd.manifest.dir }}"
+- ansible.builtin.git:
+    repo: '{{ _gtk_argocd.git.repo }}'
+    version: '{{ _gtk_argocd.git.version }}'
+    dest: '{{ _gtk_argocd.git.local_dir }}'
+  name: >-
+    Cloning argocd deployment manifest from
+    {{ _gtk_argocd.git.repo }}@{{ _gtk_argocd.git.version }}
+    to {{ _gtk_argocd.git.local_dir }}
+  when: _gtk_argocd.git.enabled
 
-- name: configuring {{ ansible_env.HOME }}/.gitops-toolkit-clusters.yaml
+- name: Generating {{ _gtk_clusters_template.dest }}...
+  ansible.builtin.template:
+    src: '{{ _gtk_clusters_template.j2 }}'
+    dest: '{{ _gtk_clusters_template.dest }}'
+    mode: '644'
   become: true
   become_user: root
-  template:
-    src: '{{ gtk_cluster_template_yaml }}'
-    dest: '{{ ansible_env.HOME }}/.gitops-toolkit-clusters.yaml'
-    mode: '{{ item.m | default("0644") }}'
 
-- include_tasks: start_clusters.yml
+- name: Starting clusters...
+  ansible.builtin.include_tasks: start_clusters.yml
   when: _gtk_start_clusters.enabled

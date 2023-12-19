@@ -1,6 +1,5 @@
 ---
 # vars file for gitops-toolkit
-
 gtk_os: '{{ ansible_system }}'
 gtk_arch: '{{ gtk_arch_map[ansible_architecture] }}'
 gtk_platform: '{{ gtk_os }}_{{ gtk_arch }}'
@@ -12,19 +11,11 @@ gtk_checksum: '{{ gtk_checksums[gtk_ver][gtk_platform] }}'
 gtk_install_dir: '{{ gtk_parent_install_dir }}/{{ gtk_binary_name }}-{{ gtk_ver }}'
 gtk_installed_exe: '{{ gtk_install_dir }}/{{ gtk_binary_name }}'
 gtk_installed_link: '{{ gtk_parent_install_dir }}/bin/{{ gtk_binary_name }}'
-gtk_corp_ca_file: '{{ gtk_corp_ca_path }}/corp_ca.pem'
 
-gtk_argocd_defaults:
-  namespace: argocd
-  manifest:
-    dir: "{{ ansible_env.HOME }}/deploy_argocd"
-    sub_path: ""
-    git:
-      enabled: true
-      repo: git@github.com:bradfordwagner/deploy-argocd.git
-      version: main
+_gtk_ca: '{{ gtk_ca_defaults | ansible.builtin.combine(gtk_ca | default({}), recursive=true) }}'
+_gtk_start_clusters: '{{ gtk_start_clusters_defaults | ansible.builtin.combine(gtk_start_clusters | default({}), recursive=true) }}'
+_gtk_argocd: '{{ gtk_argocd_defaults | ansible.builtin.combine(gtk_argocd | default({}), recursive=true) }}'
+_gtk_proxy: '{{ gtk_proxy_defaults | ansible.builtin.combine(gtk_proxy | default({}), recursive=true) }}'
+_gtk_clusters_template: '{{ gtk_clusters_template_defaults | ansible.builtin.combine(gtk_clusters_template | default({}), recursive=true) }}'
 
-gtk_start_clusters_defaults:
-  enabled: false
-  context_output_dir: "{{ ansible_env.HOME }}/.kube"
-  set_kube_config: true
+gtk_ca_bundle: '{{ _gtk_ca.path }}/ca.pem'

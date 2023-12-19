@@ -1,80 +1,86 @@
 ---
 # defaults file for gitops-toolkit
+gtk_ver: v1.1.0
 
-gtk_ver: v1.0.1
-gtk_parent_install_dir: /usr/local
-gtk_mirror: https://github.com/rumstead/gitops-toolkit/releases/download
+# use dependent Ansible roles to install required clis like the tar/gz, kubectl, and argocd
+# if u manage these with your local package manager u prolly wanna disable
+#gtk_install_dependent_binaries: true
+gtk_install_dependent_binaries: false
 
-gtk_arch_map:
-  x86_64: x86_64
-  aarch64: arm64
-  arm64: arm64
-
-gtk_enable_corp_ca: false
-# ca download path
-gtk_corp_ca_url: https://mycorpca/cachain.pem
-gtk_corp_ca_use_proxy: false
-# location to install ca
-gtk_corp_ca_path: '{{ ansible_env.HOME }}/config/certs'
-# allow override of yaml config
-gtk_cluster_template_yaml: clusters.yaml.j2
-
-gtk_binary_name: gitops-toolkit
-
-gtk_start_clusters:
+# to incorporate a private CA and proxy ala zScaler
+gtk_ca_defaults:
   enabled: false
-  context_output_dir: "{{ ansible_env.HOME }}/.kube"
+  url: https://curl.se/ca/cacert.pem
+  use_proxy: false
+  # location to download ca bundle to
+  bundle_dir: '{{ ansible_env.HOME }}/config/certs'
+
+# harvest kubeconfigs for nested clusters
+gtk_start_clusters_defaults:
+  enabled: false
+  context_output_dir: '{{ ansible_env.HOME }}/.kube'
   set_kube_config: true
 
-gtk_install_dependent_binaries: true
-
-# same as vars/main.yml - gtk_argocd_defaults
-gtk_argocd:
+# configuration parameters for the argocd deployment
+gtk_argocd_defaults:
+  credentials:
+    username: admin
+    password: admin1234
+  # Brad offers kustomize manifests to ignition ArgoCD in the controlplane cluster
+  # in the great future I'd prefer using the bitnami helm chart for argocd
+  git:
+    enabled: true
+    local_dir: '{{ ansible_env.HOME }}/deploy_argocd'
+    repo: https://github.com/bradfordwagner/deploy-argocd.git
+    version: main
   namespace: argocd
-  manifest:
-    dir: "{{ ansible_env.HOME }}/deploy_argocd"
-    sub_path: ""
-    git:
-      enabled: true
-      repo: git@github.com:bradfordwagner/deploy-argocd.git
-      version: main
+  port: '8080'
 
-gtk_clusters_proxy:
-  all_proxy: ""
-  no_proxy: ""
+# web proxy configuration...
+gtk_proxy_defaults:
+  all_proxy: ''
+  no_proxy: ''
 
-gtk_clusters:
-  dev:
-    enabled: true
-    labels:
-      kubernetes.cnp.io/environment: dev
-      kubernetes.cnp.io/cluster.jurisdiction: k3d
-      kubernetes.cnp.io/cluster.region: muse2
-      kubernetes.cnp.io/cluster.segment: multitenant
-  tst:
-    enabled: true
-    labels:
-      kubernetes.cnp.io/cluster.jurisdiction: k3d
-      kubernetes.cnp.io/cluster.region: muse2
-      kubernetes.cnp.io/cluster.segment: multitenant
-      kubernetes.cnp.io/environment: tst
-  qa:
-    enabled: true
-    labels:
-      kubernetes.cnp.io/cluster.jurisdiction: k3d
-      kubernetes.cnp.io/cluster.region: musw2
-      kubernetes.cnp.io/cluster.segment: multitenant
-      kubernetes.cnp.io/environment: qa
-  admin:
-    enabled: true
-    labels: {}
-    git_ops:
-      namespace: "{{ gtk_argocd.namespace }}"
-      port: "8080"
-      manifest_path: "{{ ansible_env.HOME }}/deploy_argocd"
-      credentials:
-        username: admin
-        password: admin1234
+# parameters to control the templating and generation of
+# all the cluster specs the gitops-toolkit will life cycle manage
+gtk_clusters_template_defaults:
+  # allow override of jinja2 template
+  j2: clusters.yaml.j2
+  dest: '{{ ansible_env.HOME }}/.gitops-toolkit-clusters.yaml'
+
+# the fleet of clusters to life cycle manage...
+# OOTB supports one control plane cluster and N-workload clusters
+#  gtk_clusters:
+#    # labels to paint onto all clusters to keep things dry
+#    labels:
+#      kubernetes.cnp.io/cluster.jurisdiction: k3d
+#      kubernetes.cnp.io/cluster.region: muse2
+#      kubernetes.cnp.io/cluster.segment: multitenant
+#
+#    # additional k3s extra arguments to paint onto all of the clusters
+#    # k3d_extra_args:
+#    #   - --k3s-arg=--foo=bar
+#
+#    # controlplane cluster
+#    controlplane:
+#      name: padm
+#      enabled: true
+#
+#    # workload clusters
+#    workload:
+#      - name: dev
+#        enabled: true
+#      - name: qa
+#        enabled: true
+
+gtk_parent_install_dir: /usr/local
+gtk_mirror: https://github.com/rumstead/gitops-toolkit/releases/download
+gtk_binary_name: gitops-toolkit
+
+gtk_arch_map:
+  aarch64: arm64
+  arm64: arm64
+  x86_64: x86_64
 
 gtk_checksums:
   # https://github.com/rumstead/gitops-toolkit/releases/download/v1.0.0/checksums.txt
@@ -107,3 +113,21 @@ gtk_checksums:
     Windows_i386: sha256:a6172b22857be01c8f3bb796960c6c1606590bd59f8d00ef9ba4950d36344ac3
     # https://github.com/rumstead/gitops-toolkit/releases/download/v1.0.1/gitops-toolkit_Windows_x86_64.tar.gz
     Windows_x86_64: sha256:9435ab5eaa6562be978859460ed375ae1aa65a19e64af65abd0f5af4006f4371
+  # https://github.com/rumstead/gitops-toolkit/releases/download/v1.1.0/checksums.txt
+  v1.1.0:
+    # https://github.com/rumstead/gitops-toolkit/releases/download/v1.1.0/gitops-toolkit_Darwin_arm64.tar.gz
+    Darwin_arm64: sha256:a3d219ae0d8e3bcf8531f026dff2afcddaec8d5f3eddebe148ed55b63ed2e62a
+    # https://github.com/rumstead/gitops-toolkit/releases/download/v1.1.0/gitops-toolkit_Darwin_x86_64.tar.gz
+    Darwin_x86_64: sha256:120fe55ee08f042aefdbc1468d2e7ae339b18572ae52a71c19d9976ff8913585
+    # https://github.com/rumstead/gitops-toolkit/releases/download/v1.1.0/gitops-toolkit_Linux_arm64.tar.gz
+    Linux_arm64: sha256:c9d661ebd4569a5ca9f53333826b92a2f1279acd33b324928ac6937a92a9860a
+    # https://github.com/rumstead/gitops-toolkit/releases/download/v1.1.0/gitops-toolkit_Linux_i386.tar.gz
+    Linux_i386: sha256:a5fdcc4a381dfea9187af0501012c7bde6ec7a78cde23c8a91151ae329b572c4
+    # https://github.com/rumstead/gitops-toolkit/releases/download/v1.1.0/gitops-toolkit_Linux_x86_64.tar.gz
+    Linux_x86_64: sha256:69a8a04aa2617af94b724c4f0301a7840fa49210f30508d9bef610d1882eddb2
+    # https://github.com/rumstead/gitops-toolkit/releases/download/v1.1.0/gitops-toolkit_Windows_arm64.tar.gz
+    Windows_arm64: sha256:ad0071c44d4b4e0fd76c43c2ebc4804d2a33895ed8ecd6638bc509ea2056bf5c
+    # https://github.com/rumstead/gitops-toolkit/releases/download/v1.1.0/gitops-toolkit_Windows_i386.tar.gz
+    Windows_i386: sha256:0304318a6a8ba94de9c25533ed262488b8ef16ba7d25fd061fa5cf19a9666b28
+    # https://github.com/rumstead/gitops-toolkit/releases/download/v1.1.0/gitops-toolkit_Windows_x86_64.tar.gz
+    Windows_x86_64: sha256:8e01e4bf6598f045449e6e72ed30a9a0c19690a62200daefa26400ccb96e5211

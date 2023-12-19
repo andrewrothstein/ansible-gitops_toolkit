@@ -1,48 +1,78 @@
+{%- macro volumes() -%}
+  {%- if _gtk_ca.enabled %}
+volumes:
+  {{ gtk_ca_bundle | quote }}: /etc/ssl/certs/corp.crt
+  {%- endif %}
+{%- endmacro -%}
+
+{%- macro envs() %}
+envs:
+  http_proxy: '{{ _gtk_proxy.all_proxy }}@all'
+  https_proxy: '{{ _gtk_proxy.all_proxy }}@all'
+  HTTP_PROXY: '{{ _gtk_proxy.all_proxy }}@all'
+  HTTPS_PROXY: '{{ _gtk_proxy.all_proxy }}@all'
+  NO_PROXY: '{{ _gtk_proxy.no_proxy }}@all'
+  no_proxy: '{{ _gtk_proxy.no_proxy }}@all'
+{%- endmacro -%}
+
+{%- macro additionalArgs(c) -%}
+additionalArgs:
+  - --k3s-arg=--tls-san=k3d-{{ c.name }}-serverlb@server:*
+  {%- set aas = c.k3d_extra_args | default([]) + (gtk_clusters.k3d_extra_args | default([])) | sort %}
+  {%- for v in aas %}
+  - {{ v | quote }}
+  {%- endfor -%}
+{%- endmacro -%}
+
+{%- macro labels(c) -%}
+  {%- set ls = {'kubernetes.cnp.io/cluster.name': c.name } | ansible.builtin.combine(c.labels | default({}), recursive=True) | ansible.builtin.combine(gtk_clusters.labels | default({}), recursive=True) -%}
+  {%- if ls | length > 0 %}
+labels:
+    {%- for k, v in ls | dictsort %}
+  {{ k | quote }}: {{ v | quote }}
+    {%- endfor -%}
+  {%- endif -%}
+{%- endmacro -%}
+
+{%- macro annotations(c) -%}
+    {%- set ans = c.annotations | default({}) | ansible.builtin.combine(gtk_clusters.annotations | default({}), recursive=True) -%}
+    {%- if ans | length > 0 %}
+annotations:
+    {%- for k, v in ans | dictsort %}
+  {{ k | quote }}: {{ v | quote }}
+    {%- endfor -%}
+    {%- endif -%}
+{%- endmacro -%}
+
+{%- macro gen_cluster(c) -%}
+  {%- if c.enabled %}
+  - name: {{ c.name | quote }}
+    network: {{ c.network | default("localclusters") | quote }}
+    {{ volumes() | indent(4) }}
+    {{ envs() | indent(4) }}
+    {{ additionalArgs(c) | indent(4) }}
+    {{ labels(c) | indent(4) }}
+    {{ annotations(c) | indent(4) }}
+  {%- endif -%}
+{%- endmacro -%}
+
+{%- macro gitOps() -%}
+gitOps:
+  namespace: {{ _gtk_argocd.namespace | quote }}
+  port: {{ _gtk_argocd.port | quote }}
+  manifestPath: '{{ _gtk_argocd.git.local_dir }}'
+  credentials:
+    username: {{ _gtk_argocd.credentials.username }}
+    password: {{ _gtk_argocd.credentials.password }}
+{%- endmacro -%}
+
+{%- macro gen_controlplane_cluster(c) -%}
+{{ gen_cluster(c) }}
+{{ gitOps() | indent(6) }}
+{%- endmacro -%}
 ---
 clusters:
-{% for cluster_name, cluster in gtk_clusters.items() %}
-{% if cluster.enabled %}
-  - name: {{ cluster_name }}
-    network: localclusters
-{% if gtk_enable_corp_ca %}
-    volumes:
-      "{{ gtk_corp_ca_file }}": "/etc/ssl/certs/corp.crt"
-{% endif %}
-    envs:
-      http_proxy: "{{ gtk_clusters_proxy.all_proxy }}@all"
-      https_proxy: "{{ gtk_clusters_proxy.all_proxy }}@all"
-      HTTP_PROXY: "{{ gtk_clusters_proxy.all_proxy }}@all"
-      HTTPS_PROXY: "{{ gtk_clusters_proxy.all_proxy }}@all"
-      NO_PROXY: "{{ gtk_clusters_proxy.no_proxy }}@all"
-      no_proxy: "{{ gtk_clusters_proxy.no_proxy }}@all"
-    additionalArgs:
-      - --k3s-arg=--tls-san=k3d-{{ cluster_name }}-serverlb@server:*
-{%- if cluster.k3d_extra_args is defined +%}
-{% for value in cluster.k3d_extra_args %}
-      - {{+ value }}
-{% endfor %}
-{%- endif %}
-
-    labels:
-      kubernetes.cnp.io/cluster.name: {{ cluster_name }}
-{% for key, value in cluster.labels.items() %}
-      {{+ key }}: {{ value }}
-{% endfor %}
-{%- if cluster.annotations is defined +%}
-    annotations:
-{% for key, value in cluster.annotations.items() %}
-      {{+ key }}: {{ value }}
-{% endfor %}
-{%- endif %}
-{%- if cluster.git_ops is defined +%}
-    gitOps:
-      namespace: {{ cluster.git_ops.namespace }}
-      port: "{{ cluster.git_ops.port }}"
-      manifestPath: "{{ _gtk_argocd.manifest.dir }}/{{ _gtk_argocd.manifest.sub_path }}"
-      credentials:
-        {{ cluster.git_ops.credentials | to_nice_yaml | indent(8) }}
-{% endif %}
-{% endif %}
-
-{% endfor %}
-
+{{ gen_controlplane_cluster(gtk_clusters.controlplane) }}
+{%- for wlc in gtk_clusters.workload | dictsort -%}
+{{ gen_cluster(wlc) }}
+{%- endfor -%}

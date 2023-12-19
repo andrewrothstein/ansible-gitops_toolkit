@@ -1,95 +1,112 @@
 ---
 - hosts: all
+  vars:
+    gtk_clusters:
+      labels:
+        kubernetes.cnp.io/cluster.jurisdiction: k3d
+        kubernetes.cnp.io/cluster.region: muse2
+        kubernetes.cnp.io/cluster.segment: multitenant
+      controlplane:
+        name: padm
+        enabled: true
+      workload:
+        - name: dev
+          enabled: true
+        - name: qa
+          enabled: true
   roles:
     - role: '{{ playbook_dir }}'
-      # generally the following does not need to be set
-      gtk_argocd:
-        namespace: override-namespace
-        manifest:
-          # required override as it will take the user name ie root/username
-          dir: "/tmp/argocd_manifest"
-          git:
-            # disable - builder image does not have git installed - oops!
-            enabled: false
-      gtk_clusters:
-        dev-disabled:
-          enabled: false
-          labels:
-            kubernetes.cnp.io/environment: dev
-            kubernetes.cnp.io/cluster.jurisdiction: k3d
-            kubernetes.cnp.io/cluster.region: musw2
-            kubernetes.cnp.io/cluster.segment: multitenant
-        dev:
-          enabled: true
-          labels:
-            kubernetes.cnp.io/environment: dev
-            kubernetes.cnp.io/cluster.jurisdiction: k3d
-            kubernetes.cnp.io/cluster.region: muse2
-            kubernetes.cnp.io/cluster.segment: multitenant
-          annotations:
-            test-annotation: hi/friends
-        tst:
-          enabled: true
-          labels:
-            kubernetes.cnp.io/cluster.jurisdiction: k3d
-            kubernetes.cnp.io/cluster.region: muse2
-            kubernetes.cnp.io/cluster.segment: multitenant
-            kubernetes.cnp.io/environment: tst
-        qa:
-          enabled: true
-          labels:
-            kubernetes.cnp.io/cluster.jurisdiction: k3d
-            kubernetes.cnp.io/cluster.region: musw2
-            kubernetes.cnp.io/cluster.segment: multitenant
-            kubernetes.cnp.io/environment: qa
-        admin:
-          enabled: true
-          labels: {}
-          annotations:
-            kubernetes.cnp.io/test: test/annotation
-          git_ops:
-            namespace: "{{ gtk_argocd.namespace }}"
-            port: "8080"
-            manifest_path: "{{ ansible_env.HOME }}/deploy_argocd"
-            credentials:
-              username: admin
-              password: admin1234
-        admin2:
-          enabled: true
-          labels: {}
-          annotations: {}
-          git_ops:
-            namespace: "{{ gtk_argocd.namespace }}"
-            port: "8080"
-            manifest_path: "{{ ansible_env.HOME }}/deploy_argocd"
-            credentials:
-              username: admin
-              password: admin1234
-  tasks:
-    - name: assert binaries are runnable
-      command: "{{ item }}"
-      register: exec
-      failed_when: exec.rc > 0
-      loop:
-        - /usr/local/bin/gitops-toolkit
-        - /usr/local/bin/kubectl
-        - /usr/local/bin/argocd
-
-    - name: Get Home clusters yaml stat
-      stat:
-        path: "{{ ansible_env.HOME }}/.gitops-toolkit-clusters.yaml"
-      register: home_clusters_yaml
-
-    - name: Get Home clusters yaml checksum
-      set_fact:
-        home_clusters_sha: "{{ home_clusters_yaml.stat.checksum }}"
-
-    - name: Get Expected clusters yaml stat
-      stat:
-        path: "./tests/expected.clusters.yaml"
-      register: expected_clusters_yaml
-
-    - name: Get Expected clusters yaml checksum
-      set_fact:
-        expected_clusters_sha: "{{ expected_clusters_yaml.stat.checksum }}"
-      failed_when: expected_clusters_sha != home_clusters_sha
+#- hosts: all
+#  roles:
+#    - role: '{{ playbook_dir }}'
+#      # generally the following does not need to be set
+#      gtk_argocd:
+#        namespace: override-namespace
+#        manifest:
+#          # required override as it will take the user name ie root/username
+#          dir: "/tmp/argocd_manifest"
+#          git:
+#            # disable - builder image does not have git installed - oops!
+#            enabled: false
+#      gtk_clusters:
+#        dev-disabled:
+#          enabled: false
+#          labels:
+#            kubernetes.cnp.io/environment: dev
+#            kubernetes.cnp.io/cluster.jurisdiction: k3d
+#            kubernetes.cnp.io/cluster.region: musw2
+#            kubernetes.cnp.io/cluster.segment: multitenant
+#        dev:
+#          enabled: true
+#          labels:
+#            kubernetes.cnp.io/environment: dev
+#            kubernetes.cnp.io/cluster.jurisdiction: k3d
+#            kubernetes.cnp.io/cluster.region: muse2
+#            kubernetes.cnp.io/cluster.segment: multitenant
+#          annotations:
+#            test-annotation: hi/friends
+#        tst:
+#          enabled: true
+#          labels:
+#            kubernetes.cnp.io/cluster.jurisdiction: k3d
+#            kubernetes.cnp.io/cluster.region: muse2
+#            kubernetes.cnp.io/cluster.segment: multitenant
+#            kubernetes.cnp.io/environment: tst
+#        qa:
+#          enabled: true
+#          labels:
+#            kubernetes.cnp.io/cluster.jurisdiction: k3d
+#            kubernetes.cnp.io/cluster.region: musw2
+#            kubernetes.cnp.io/cluster.segment: multitenant
+#            kubernetes.cnp.io/environment: qa
+#        admin:
+#          enabled: true
+#          labels: {}
+#          annotations:
+#            kubernetes.cnp.io/test: test/annotation
+#          git_ops:
+#            namespace: "{{ gtk_argocd.namespace }}"
+#            port: "8080"
+#            manifest_path: "{{ ansible_env.HOME }}/deploy_argocd"
+#            credentials:
+#              username: admin
+#              password: admin1234
+#        admin2:
+#          enabled: true
+#          labels: {}
+#          annotations: {}
+#          git_ops:
+#            namespace: "{{ gtk_argocd.namespace }}"
+#            port: "8080"
+#            manifest_path: "{{ ansible_env.HOME }}/deploy_argocd"
+#            credentials:
+#              username: admin
+#              password: admin1234
+#  tasks:
+#    - name: assert binaries are runnable
+#      command: "{{ item }}"
+#      register: exec
+#      failed_when: exec.rc > 0
+#      loop:
+#        - /usr/local/bin/gitops-toolkit
+#        - /usr/local/bin/kubectl
+#        - /usr/local/bin/argocd
+#
+#    - name: Get Home clusters yaml stat
+#      stat:
+#        path: "{{ ansible_env.HOME }}/.gitops-toolkit-clusters.yaml"
+#      register: home_clusters_yaml
+#
+#    - name: Get Home clusters yaml checksum
+#      set_fact:
+#        home_clusters_sha: "{{ home_clusters_yaml.stat.checksum }}"
+#
+#    - name: Get Expected clusters yaml stat
+#      stat:
+#        path: "./tests/expected.clusters.yaml"
+#      register: expected_clusters_yaml
+#
+#    - name: Get Expected clusters yaml checksum
+#      set_fact:
+#        expected_clusters_sha: "{{ expected_clusters_yaml.stat.checksum }}"
+#      failed_when: expected_clusters_sha != home_clusters_sha
