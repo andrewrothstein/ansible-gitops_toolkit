@@ -1,11 +1,15 @@
 ---
 - hosts: all
   vars:
+    gtk_start_clusters:
+      enabled: true
     gtk_clusters:
       labels:
         kubernetes.cnp.io/cluster.jurisdiction: k3d
         kubernetes.cnp.io/cluster.region: muse2
         kubernetes.cnp.io/cluster.segment: multitenant
+      annotations:
+        foo: bar
       controlplane:
         name: padm
         enabled: true

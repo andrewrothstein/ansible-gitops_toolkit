@@ -1,65 +1,72 @@
 ---
-- name: Get existing clusters: k3d cluster list -o json | jq -r 'map(.name)'
+- name: Get existing clusters
   ansible.builtin.shell: k3d cluster list -o json | jq -r 'map(.name)'
   register: existing_clusters_json
 
-- name: Compute clusters to enable, disable, and those that are admin
+- name: Compute existing and all clusters
   ansible.builtin.set_fact:
-    existing_clusters: "{{ existing_clusters_json.stdout }}"
-    enabled_clusters: "{{ gtk_clusters | dict2items | selectattr('value.enabled', '==', True) | map(attribute='key')}}"
-    disabled_clusters: "{{ gtk_clusters | dict2items | selectattr('value.enabled', '==', False) | map(attribute='key')}}"
-    admin_clusters: "{{ gtk_clusters | dict2items | selectattr('value.git_ops', 'defined') | map(attribute='key')}}"
-- ansible.builtin.set_fact:
-    first_admin_cluster: "{{ admin_clusters | first }}"
-    new_non_admin_clusters: "{{ enabled_clusters | difference(admin_clusters) | difference(existing_clusters) }}"
-    existing_disabled_clusters: "{{ disabled_clusters | intersect(existing_clusters) }}"
-- ansible.builtin.set_fact:
-    should_rebuild_admin: "{{ new_non_admin_clusters | length > 0 }}"
-    should_run_gtk: "{{ enabled_clusters | difference(existing_clusters) | length > 0 }}"
+    existing_clusters: '{{ existing_clusters_json.stdout }}'
+    all_clusters: '{{ [gtk_clusters.controlplane] + gtk_clusters.workload }}'
 
-- name: Deleting {{ admin_clusters | length }} admin clusters
+- name: Compute enabled and disabled clusters
+  ansible.builtin.set_fact:
+    enabled_clusters: "{{ all_clusters | selectattr('enabled', '==', True) | map(attribute='name') }}"
+    disabled_clusters: "{{ all_clusters | selectattr('enabled', '==', False) | map(attribute='name') }}"
+
+- name: Compute clusters to create and delete
+  ansible.builtin.set_fact:
+    clusters_to_delete: '{{ disabled_clusters | intersect(existing_clusters) }}'
+    clusters_to_create: '{{ enabled_clusters | difference(existing_clusters) }}'
+
+- name: Compute counts of clusters to create and delete
+  ansible.builtin.set_fact:
+    cnt_to_delete: '{{ clusters_to_delete | length }}'
+    cnt_to_create: '{{ clusters_to_create | length }}'
+
+- name: Deleting {{ cnt_to_delete }} existing clusters
   ansible.builtin.command: k3d cluster delete {{ item | quote }}
-  ignore_errors: true
-  loop: "{{ admin_clusters }}"
-  when: should_rebuild_admin
+  loop: "{{ clusters_to_delete }}"
 
-- name: Deleting {{ existing_disabled_clusters | length }} existing disabled clusters
-  ansible.builtin.command: k3d cluster delete {{ item | quote }}
-  ignore_errors: true
-  loop: "{{ existing_disabled_clusters }}"
-  when: existing_disabled_clusters | length > 0
-
-- name: Building clusters: gitops-toolkit clusters
+- name: Building clusters...
   ansible.builtin.shell: gitops-toolkit clusters
   register: gtk_exec_res
   until: gtk_exec_res.rc == 0
   retries: 5
-  when: should_run_gtk
-- name: Output:
+  when: cnt_to_create | int > 0
+
+- name: Cluster builds output...
   ansible.builtin.debug:
     var: gtk_exec_res.stderr_lines
   when: should_run_gtk
 
-- name: creating contexts dir {{ gtk_start_clusters.context_output_dir }}
+- name: creating contexts dir {{ _gtk_start_clusters.context_output_dir }}
   file:
-    path: '{{ gtk_start_clusters.context_output_dir }}'
+    path: '{{ _gtk_start_clusters.context_output_dir }}'
     state: directory
     mode: '755'
-- name: issuing {{ enabled_clusters | length }}  kube contexts into {{ gtk_start_clusters.context_output_dir }}
-  shell: k3d kubeconfig get {{ item }} > {{ gtk_start_clusters.context_output_dir }}/k3d_{{ item }}_ctx
-  loop: "{{ enabled_clusters }}"
 
-- name: set kubeconfig to admin cluster
-  ansible.builtin.file:
-    path: '{{ gtk_start_clusters.context_output_dir }}/config'
-    state: link
-    src: '{{ _gtk_start_clusters.context_output_dir }}/k3d_{{ first_admin_cluster }}_ctx'
-    force: true
-  when: _gtk_start_clusters.set_kube_config
-- name: set namespace={{ gtk_clusters[first_admin_cluster].git_ops.namespace }} on config to argocd
-  shell: |
-    kubectl \
-      config \
-      set-context $(kubectl config current-context) \
-      --namespace={{ gtk_clusters[first_admin_cluster].git_ops.namespace }}
-  when: _gtk_start_clusters.set_kube_config
+- name: >-
+    Issuing {{ enabled_clusters | length }} kube contexts
+    into {{ _gtk_start_clusters.context_output_dir -}}
+  loop: "{{ enabled_clusters }}"
+  shell: |-
+    k3d \
+      kubeconfig \
+      get \
+      {{ item | quote }} \
+      > {{ _gtk_start_clusters.context_output_dir }}/k3d_{{ item }}_ctx
+
+- when: _gtk_start_clusters.set_kube_config
+  block:
+    - name: Set kubeconfig to admin cluster
+      ansible.builtin.file:
+        dest: '{{ _gtk_start_clusters.context_output_dir }}/config'
+        src: '{{ _gtk_start_clusters.context_output_dir }}/k3d_{{ _gtk_clusters.controlplane.name }}_ctx'
+        state: link
+
+    - name: Set namespace={{ _gtk_argocd.namespace }} on config for current-context
+      shell: |
+        kubectl \
+          config \
+          set-context $(kubectl config current-context) \
+          --namespace={{ _gtk_argocd.namespace }}

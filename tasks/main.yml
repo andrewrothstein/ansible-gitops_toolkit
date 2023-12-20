@@ -10,7 +10,11 @@
     - name: Install kubectl
       ansible.builtin.include_role:
         name: andrewrothstein.kubectl
-    - ansible.builtin.include_role:
+    - name: Install k3d
+      ansible.builtin.include_role:
+        name: andrewrothstein.kind
+    - name: Install argocd cli
+      ansible.builtin.include_role:
         name: andrewrothstein.argocd
   when: gtk_install_dependent_binaries | default(true)
 

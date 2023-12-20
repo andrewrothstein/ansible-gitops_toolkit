@@ -7,3 +7,5 @@
   version: v1.2.13
 - name: andrewrothstein.argocd
   version: v1.2.3
+- name: andrewrothstein.k3d
+  version: v1.1.9
